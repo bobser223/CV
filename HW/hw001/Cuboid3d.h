@@ -18,8 +18,8 @@ public:
 
     Id id;
 
-    cv::Vec3d position; // the bottom right corner (in world NED)
-    cv::Vec3d dimensions; // (all from reference corner) height length width ()
+    cv::Vec3d position;    // reference corner in NED: (N0, E0, D0) at local (0,0,0)
+    cv::Vec3d dimensions;  // (length_N, width_E, height_Up), all >= 0
 
     std::array<cv::Mat, 6> textures;
 
@@ -43,13 +43,14 @@ public:
 
     ~Cuboid3d() = default;
 
-    std::optional<cv::Mat> getFrontTexture() {
+    std::optional<cv::Mat> getFrontTexture() const {
+        if (textures[0].empty()) return std::nullopt;
         return textures[0];
     }
 
-    std::optional<cv::Vec3d> local2NED(const cv::Vec3d& local);
+    std::optional<cv::Vec3d> local2NED(const cv::Vec3d& local) const;
 
-    std::optional<cv::Vec3d> global2NED(const cv::Vec3d& global);
+    std::optional<cv::Vec3d> NED2local(const cv::Vec3d& global) const;
 
     bool isSegmentCollisionFree(const cv::Vec3d& point1, const cv::Vec3d& point2) const;
 

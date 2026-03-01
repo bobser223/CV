@@ -14,7 +14,7 @@ Cuboid3d::Id Cuboid3d::make_id() {
     return next_id_.fetch_add(1, std::memory_order_relaxed);
 }
 
-std::optional<cv::Vec3d> Cuboid3d::local2NED(const cv::Vec3d& local) {
+std::optional<cv::Vec3d> Cuboid3d::local2NED(const cv::Vec3d& local) const {
     // local = (north, east, up) all >= 0
     if (local[0] < 0 || local[1] < 0 || local[2] < 0)
         return std::nullopt;
@@ -27,11 +27,14 @@ std::optional<cv::Vec3d> Cuboid3d::local2NED(const cv::Vec3d& local) {
     return position + cv::Vec3d(local[0], local[1], -local[2]);
 }
 
-std::optional<cv::Vec3d> Cuboid3d::global2NED(const cv::Vec3d& global) {
-    // Convert NED point to cuboid-local (N,E,Up)
-    const cv::Vec3d d = global - position;
-    const cv::Vec3d local(d[0], d[1], -d[2]);
-    return local2NED(local);
+std::optional<cv::Vec3d> Cuboid3d::NED2local(const cv::Vec3d& global) const {
+    const cv::Vec3d d = global - position;      // d in NED
+    const cv::Vec3d local(d[0], d[1], -d[2]);   // convert to (N,E,Up)
+
+    if (local[0] < 0 || local[1] < 0 || local[2] < 0) return std::nullopt;
+    if (local[0] > dimensions[0] || local[1] > dimensions[1] || local[2] > dimensions[2]) return std::nullopt;
+
+    return local; // <-- повертаємо local, не NED
 }
 
 bool Cuboid3d::isSegmentCollisionFree(const cv::Vec3d& point1, const cv::Vec3d& point2) const {
