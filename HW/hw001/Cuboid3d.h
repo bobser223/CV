@@ -54,6 +54,8 @@ public:
 
     bool isSegmentCollisionFree(const cv::Vec3d& point1, const cv::Vec3d& point2) const;
 
+    std::optional<cv::Vec3d> getIntersectionPoint(const cv::Vec3d& C_w, const cv::Vec3d& d_w) const;
+
 private:
     static std::atomic<Id> next_id_;
     static Id make_id();
