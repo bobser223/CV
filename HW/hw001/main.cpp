@@ -5,35 +5,34 @@
 
 int main() {
     auto objects = createObjects();
+    const int imageWidth = 1280;
+    const int imageHeight = 720;
 
 
-    const int W=1280, H=720;
-    cv::Matx33d K(
-        800, 0, W/2.0,
-        0, 800, H/2.0,
-        0,   0,   1
+    // camera pose in world (NED)
+    cv::Vec3d C_world(0, 0, 0);
+
+    // NED -> camera: x(right)=E, y(down)=D, z(forward)=N
+    cv::Matx33d R_cw(
+        0, 1, 0,
+        0, 0, 1,
+        1, 0, 0
     );
 
-    cv::Vec3d T_world(10306, 306, -304);        // target (center of apple)
-    cv::Vec3d C_world(10306 - 2000, 306, -304 - 500); // camera a bit back in North and up (more negative Z)
-    cv::Vec3d upHint_world(0, 0, -1);           // up in NED
+    cv::Vec3d t = -(R_cw * C_world);
+    cv::Affine3d P(R_cw, t);
 
-    auto lookAt_R_cw = [](const cv::Vec3d& C, const cv::Vec3d& T, const cv::Vec3d& upHint) {
-        cv::Vec3d f = T - C; f *= 1.0 / cv::norm(f);   // forward (world)
-        cv::Vec3d r = f.cross(upHint); r *= 1.0 / cv::norm(r);
-        cv::Vec3d u = r.cross(f);
-        return cv::Matx33d(
-            r[0], r[1], r[2],
-            u[0], u[1], u[2],
-            f[0], f[1], f[2]
-        );
-    };
+    const double fx = 900.0;
+    const double fy = 900.0;
+    const double cx = imageWidth * 0.5;
+    const double cy = imageHeight * 0.5;
+    const cv::Matx33d K(
+        fx, 0, cx,
+        0, fy, cy,
+        0, 0, 1
+    );
 
-    cv::Matx33d R = lookAt_R_cw(C_world, T_world, upHint_world);
-    cv::Vec3d t = -(R * C_world);
-    cv::Affine3d P(R, t);
-
-    cv::Mat img = project2d(P, objects, W, H, K);
+    cv::Mat img = project2d(P, objects, imageWidth, imageHeight, K);
 
 
 

@@ -195,7 +195,7 @@ static void localToTexel(int faceId, const cv::Vec3d& local,
         case 2: // bottom up=0, varies (n,e)
         case 5: // top up=H
             u = (L > 0) ? (local[0] / L) : 0.0;
-            v = (W > 0) ? (local[1] / W) : 0.0; // інколи треба 1-v, залежить від орієнтації картинки
+            v = (W > 0) ? (local[1] / W) : 0.0; // or 1-v
             break;
     }
 
