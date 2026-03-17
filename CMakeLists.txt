@@ -13,6 +13,8 @@ add_executable(code HW/hw001/main.cpp
         HW/hw001/Cuboid3d.cpp
         HW/hw001/Cuboid3d.h
         HW/hw001/scane.h
-        HW/hw001/scane.cpp)
+        HW/hw001/scane.cpp
+        HW/hw002/utils002.cpp
+        HW/hw002/utils002.h)
 target_include_directories(code PRIVATE ${OpenCV_INCLUDE_DIRS})
 target_link_libraries(code PRIVATE ${OpenCV_LIBS})
