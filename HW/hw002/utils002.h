@@ -7,11 +7,8 @@
 
 
 #include <opencv2/core.hpp>
-#include <optional>
-#include <atomic>
-#include <cstdint>
 #include <array>
-
+#include <opencv2/core/affine.hpp>
 
 
 cv::Affine3d eightPointAlgorithm(const std::array<cv::Vec3d, 8>& x_0_points, const std::array<cv::Vec3d, 8>& x_points);
