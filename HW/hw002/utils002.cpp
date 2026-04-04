@@ -67,17 +67,29 @@ cv::Affine3d eightPointAlgorithm(const std::vector<cv::Vec2d>& x_0_points, const
 
     cv::SVD::compute(essentialMatrixEstimation, w, U, Vt, cv::SVD::FULL_UV);
 
-    S = cv::Mat::diag(w);
+    if (cv::determinant(U * Vt) < 0) {
+        Vt = -Vt;
+    }
 
-    cv::Mat t_x = U * W *S * U.t();
+    double s = (w.at<double>(0) + w.at<double>(1)) / 2.0;
 
+    cv::Mat S_corrected = (cv::Mat_<double>(3,3) <<
+        s, 0, 0,
+        0, s, 0,
+        0, 0, 0
+    );
+
+    cv::Mat t_x = U * W * S_corrected * U.t();
     cv::Mat R = U * W.inv() * Vt;
 
 
 
 
 
-
+    if (cv::determinant(R) < 0) {
+        R = -R;
+        t_x = -t_x;
+    }
 
     return cv::Affine3d(
         R,
