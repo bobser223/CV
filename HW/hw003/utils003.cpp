@@ -34,6 +34,14 @@ std::vector<cv::Point2f> readPointsFromFile(const std::string& filename) {
     return points;
 }
 
+std::vector<cv::Point2d> points2f2points2d(const std::vector<cv::Point2f>& points) {
+    std::vector<cv::Point2d> points2d;
+    for (const auto& point : points) {
+        points2d.emplace_back(point.x, point.y);
+    }
+    return points2d;
+}
+
 template<typename T>
 std::pair<T, T> pick2(const std::vector<T>& v, size_t n) {
 
@@ -218,7 +226,8 @@ cv::Affine3d PnPbyIdx(
     );
 
     if (!ok) {
-        throw std::runtime_error("solvePnP failed");
+        // throw std::runtime_error("solvePnP failed");
+        return(cv::Matx33d::eye, cv::Vec3d(0, 0, 0));
     }
 
     cv::Mat R;
@@ -318,3 +327,5 @@ cv::Affine3d RANSACforPnP(const std::vector<cv::Point2d>& pixels_x,
 
 }
 
+
+// ------------------------------- task 4 ----------------

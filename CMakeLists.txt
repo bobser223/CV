@@ -9,6 +9,8 @@ endif()
 
 find_package(OpenCV REQUIRED)
 find_package(Ceres REQUIRED)
+find_package(Matplot++ REQUIRED)
+
 
 add_executable(code
 #        HW/hw002/main.cpp
@@ -18,9 +20,12 @@ add_executable(code
         HW/hw003/main.cpp
         HW/hw003/regressionDrawer.cpp
         HW/hw003/regressionDrawer.h
+        HW/hw003/task4.cpp
+        HW/hw003/task4.h
 )
 target_include_directories(code PRIVATE ${OpenCV_INCLUDE_DIRS})
 target_link_libraries(code PRIVATE
         ${OpenCV_LIBS}
         Ceres::ceres
+        Matplot++::matplot
 )
