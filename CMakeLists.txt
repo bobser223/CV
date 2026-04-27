@@ -12,7 +12,7 @@ find_package(Ceres REQUIRED)
 find_package(Matplot++ REQUIRED)
 
 
-add_executable(code
+add_executable(homework003
 #        HW/hw002/main.cpp
 
         HW/hw003/utils003.h
@@ -22,10 +22,27 @@ add_executable(code
         HW/hw003/regressionDrawer.h
         HW/hw003/task4.cpp
         HW/hw003/task4.h
+
 )
-target_include_directories(code PRIVATE ${OpenCV_INCLUDE_DIRS})
-target_link_libraries(code PRIVATE
+
+target_include_directories(homework003 PRIVATE ${OpenCV_INCLUDE_DIRS})
+target_link_libraries(homework003 PRIVATE
         ${OpenCV_LIBS}
         Ceres::ceres
         Matplot++::matplot
 )
+
+
+add_executable( homework004
+        HW/hw004/main.cpp
+        HW/hw004/utils002.cpp
+        HW/hw004/utils002.h
+
+)
+target_include_directories(homework004 PRIVATE ${OpenCV_INCLUDE_DIRS})
+target_link_libraries(homework004 PRIVATE
+        ${OpenCV_LIBS}
+        Ceres::ceres
+        Matplot++::matplot
+)
+

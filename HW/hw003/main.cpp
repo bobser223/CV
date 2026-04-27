@@ -183,7 +183,7 @@ auto testTask2() {
             new ceres::AutoDiffCostFunction<LinearRegression, 1, 2>(
                 new LinearRegression(x, y)
             ),
-            new ceres::HuberLoss(5.0),
+            new ceres::HuberLoss(0.1),
             params_loss
         );
     }
