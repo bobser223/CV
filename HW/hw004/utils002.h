@@ -8,11 +8,7 @@
 
 #include <opencv2/core/affine.hpp>
 #include <opencv2/core/types.hpp>
-typedef  cv::Point3d point3;
-typedef  cv::Point2d point2;
-typedef  cv::Vec3d vec3;
-typedef  cv::Vec2d vec2;
-
+#include "cv_types.h"
 
 std::vector<vec2> projectPoints(const std::vector<point3>& points,
                                   const cv::Affine3d affine,

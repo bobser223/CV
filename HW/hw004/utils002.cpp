@@ -1,6 +1,8 @@
 #include "utils002.h"
 
+
 #include <opencv2/calib3d.hpp>
+#include <ceres/ceres.h>
 
 
 
@@ -138,6 +140,198 @@ std::tuple<cv::Matx33d, vec3, std::vector<point3>>estimateSLAM(const std::vector
     return {affine.rotation(), affine.translation(), points3D};
 }
 
+struct BundleAdjustment {
+    Eigen::Vector2d x;
+
+    BundleAdjustment(const Eigen::Vector2d& x): x(x)
+    {}
+
+    template <typename T>
+    bool operator()(const T* const q_0,const T* const t_0, const T* const X_0, T* residuals) const {
+
+        Eigen::Quaternion<T> q(q_0[3], q_0[0], q_0[1], q_0[2]);
+
+        Eigen::Matrix<T, 3, 1> t(
+            t_0[0],
+            t_0[1],
+            t_0[2]
+        );
+
+        Eigen::Matrix<T, 3, 1> X(
+            X_0[0],
+            X_0[1],
+            X_0[2]
+        );
+        Eigen::Matrix<T, 3, 1> X_cam = q * X + t;
+
+        T u = X_cam[0] / X_cam[2];
+        T v = X_cam[1] / X_cam[2];
+
+        residuals[0] = u - T(x[0]);
+        residuals[1] = v - T(x[1]);
+
+        return true;
+    }
+
+
+};
+
+
+struct ReprojectionCam1Pose1 {
+    Eigen::Vector2d x;
+    ReprojectionCam1Pose1(const Eigen::Vector2d& x): x(x){}
+
+    template<typename T>
+    bool operator()(const T* const X_raw, T* residual) {
+        Eigen::Matrix<T, 3, 1> X(X_raw[0], X_raw[1], X_raw[2]);
+        T u = X[0] / X[2];
+        T v = X[1] / X[2];
+        residual[0] = u - T(x[0]);
+        residual[1] = v - T(x[1]);
+        return true;
+    }
+};
+
+struct ReprojectionCam2Pose1{
+    Eigen::Vector2d x;
+    ReprojectionCam2Pose1(const Eigen::Vector2d& x): x(x){}
+
+    template<typename T>
+    bool operator()(const T* const q_cam1_cam2_raw,const T* const t_cam1_cam2_raw,
+        const T* const X_raw, T* residual) {
+        Eigen::Quaternion<T> q_cam1_cam2(q_cam1_cam2_raw[3],
+            q_cam1_cam2_raw[0],
+            q_cam1_cam2_raw[1],
+            q_cam1_cam2_raw[2]);
+
+        Eigen::Matrix<T, 3, 1> t_cam1_cam2(
+            t_cam1_cam2_raw[0],
+            t_cam1_cam2_raw[1],
+            t_cam1_cam2_raw[2]
+        );
+
+        Eigen::Matrix<T, 3, 1> X(
+            X_raw[0],
+            X_raw[1],
+            X_raw[2]
+        );
+
+        Eigen::Matrix<T, 3, 1> X_cam1_cam2 = q_cam1_cam2 * X + t_cam1_cam2;
+
+        T u = X_cam1_cam2[0] / X_cam1_cam2[2];
+        T v = X_cam1_cam2[1] / X_cam1_cam2[2];
+        residual[0] = u - T(x[0]);
+        residual[1] = v - T(x[1]);
+        return true;
+    }
+};
+
+struct ReprojectionCam1Pose2{
+    Eigen::Vector2d x;
+    ReprojectionCam1Pose2(const Eigen::Vector2d& x): x(x){}
+
+    template<typename T>
+    bool operator()(const T* const q_pose1_pose2_raw ,const T* const t_pose1_pose2_raw,
+        const T* const X_raw, T* residual) {
+        Eigen::Quaternion<T> q_pose1_pose2(q_pose1_pose2_raw[3], q_pose1_pose2_raw[0], q_pose1_pose2_raw[1], q_pose1_pose2_raw[2]);
+
+        Eigen::Matrix<T, 3, 1> t_pose1_pose2(
+            t_pose1_pose2_raw[0],
+            t_pose1_pose2_raw[1],
+            t_pose1_pose2_raw[2]
+            );
+
+
+        Eigen::Matrix<T, 3, 1> X(
+            X_raw[0],
+            X_raw[1],
+            X_raw[2]
+        );
+
+        Eigen::Matrix<T, 3, 1> X_cam1_pose2 = q_pose1_pose2 * X + t_pose1_pose2;
+
+        T u = X_cam1_pose2[0] / X_cam1_pose2[2];
+        T v = X_cam1_pose2[1] / X_cam1_pose2[2];
+        residual[0] = u - T(x[0]);
+        residual[1] = v - T(x[1]);
+        return true;
+    }
+};
+
+struct ReprojectionCam2Pose2{
+    Eigen::Vector2d x;
+    ReprojectionCam2Pose2(const Eigen::Vector2d& x): x(x){}
+
+
+    template<typename T>
+    bool operator()(const T* const q_cam1_cam2_raw,const T* const t_cam1_cam2_raw,
+        const T* const q_pose1_pose2_raw ,const T* const t_pose1_pose2_raw,
+        const T* const X_raw, T* residual) {
+
+        Eigen::Quaternion<T> q_cam1_cam2(q_cam1_cam2_raw[3],
+            q_cam1_cam2_raw[0],
+            q_cam1_cam2_raw[1],
+            q_cam1_cam2_raw[2]);
+
+        Eigen::Matrix<T, 3, 1> t_cam1_cam2(
+            t_cam1_cam2_raw[0],
+            t_cam1_cam2_raw[1],
+            t_cam1_cam2_raw[2]
+        );
+
+        Eigen::Quaternion<T> q_pose1_pose2(q_pose1_pose2_raw[3], q_pose1_pose2_raw[0], q_pose1_pose2_raw[1], q_pose1_pose2_raw[2]);
+
+        Eigen::Matrix<T, 3, 1> t_pose1_pose2(
+            t_pose1_pose2_raw[0],
+            t_pose1_pose2_raw[1],
+            t_pose1_pose2_raw[2]
+            );
+
+
+        Eigen::Matrix<T, 3, 1> X(
+            X_raw[0],
+            X_raw[1],
+            X_raw[2]
+        );
+
+        auto X_cam2_pose2 =q_cam1_cam2 * (q_pose1_pose2 * X + t_pose1_pose2) + t_cam1_cam2;
+
+        T u = X_cam2_pose2[0] / X_cam2_pose2[2];
+        T v = X_cam2_pose2[1] / X_cam2_pose2[2];
+        residual[0] = u - T(x[0]);
+        residual[1] = v - T(x[1]);
+        return true;
+    }
+
+
+
+};
+
+
+
+
+auto binocularSLAM(
+    const std::vector<vec2>& x_pixels_pos_1_cam_1,
+    const std::vector<vec2>& x_pixels_pos_1_cam_2,
+    const std::vector<vec2>& x_pixels_pos_2_cam_1,
+    const std::vector<vec2>& x_pixels_pos_2_cam_2,
+    const cv::Matx33d& cameraMatrix1,
+    const cv::Matx33d& cameraMatrix2) {
+
+    // estimation block
+    auto [R_1, t_1, points3D] =
+        estimateSLAM(x_pixels_pos_1_cam_1, x_pixels_pos_1_cam_2, cameraMatrix1);
+
+    auto [R_2, t_2, points3D_2] =
+        estimateSLAM(x_pixels_pos_1_cam_1, x_pixels_pos_2_cam_1, cameraMatrix2); // R2(r1+t1) + t2
+
+    auto [R3, t3, points3D_3] =
+        estimateSLAM(x_pixels_pos_1_cam_1, x_pixels_pos_2_cam_2, cameraMatrix2);
+
+
+
+
+}
 
 
 

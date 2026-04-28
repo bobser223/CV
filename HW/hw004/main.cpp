@@ -5,12 +5,8 @@
 #include <opencv2/opencv.hpp>
 
 #include "utils002.h"
+#include "cv_types.h"
 
-typedef  cv::Point3d point3;
-typedef  cv::Point2d point2;
-typedef  cv::Vec3d vec3;
-typedef  cv::Vec2d vec2;
-typedef size_t idx;
 
 struct LinearRegression{
     LinearRegression(const double x_, const double y_): x(x_), y(y_) {}

@@ -11,6 +11,8 @@ find_package(OpenCV REQUIRED)
 find_package(Ceres REQUIRED)
 find_package(Matplot++ REQUIRED)
 
+include_directories(include)
+
 
 add_executable(homework003
 #        HW/hw002/main.cpp
@@ -22,6 +24,7 @@ add_executable(homework003
         HW/hw003/regressionDrawer.h
         HW/hw003/task4.cpp
         HW/hw003/task4.h
+        include/cv_types.h
 
 )
 
