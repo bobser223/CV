@@ -177,12 +177,41 @@ struct BundleAdjustment {
 };
 
 
+
+
+
+Eigen::Quaterniond rotationMatrixToQuaternion(const cv::Matx33d& R_cv) {
+    Eigen::Matrix3d R;
+
+    R << R_cv(0, 0), R_cv(0, 1), R_cv(0, 2),
+         R_cv(1, 0), R_cv(1, 1), R_cv(1, 2),
+         R_cv(2, 0), R_cv(2, 1), R_cv(2, 2);
+
+    Eigen::Quaterniond q(R);
+
+    q.normalize();
+
+    return q;
+}
+
+std::vector<Eigen::Vector2d> cvVector2dToEigenVector2d(const std::vector<cv::Vec2d>& x) {
+    std::vector<Eigen::Vector2d> res;
+    res.reserve(x.size());
+    for (const auto& vec2d: x) {
+        res.emplace_back(vec2d[0], vec2d[1]);
+    }
+    return res;
+}
+
+
+
+
 struct ReprojectionCam1Pose1 {
     Eigen::Vector2d x;
     ReprojectionCam1Pose1(const Eigen::Vector2d& x): x(x){}
 
     template<typename T>
-    bool operator()(const T* const X_raw, T* residual) {
+    bool operator()(const T* const X_raw, T* residual) const {
         Eigen::Matrix<T, 3, 1> X(X_raw[0], X_raw[1], X_raw[2]);
         T u = X[0] / X[2];
         T v = X[1] / X[2];
@@ -198,7 +227,7 @@ struct ReprojectionCam2Pose1{
 
     template<typename T>
     bool operator()(const T* const q_cam1_cam2_raw,const T* const t_cam1_cam2_raw,
-        const T* const X_raw, T* residual) {
+        const T* const X_raw, T* residual) const {
         Eigen::Quaternion<T> q_cam1_cam2(q_cam1_cam2_raw[3],
             q_cam1_cam2_raw[0],
             q_cam1_cam2_raw[1],
@@ -232,7 +261,7 @@ struct ReprojectionCam1Pose2{
 
     template<typename T>
     bool operator()(const T* const q_pose1_pose2_raw ,const T* const t_pose1_pose2_raw,
-        const T* const X_raw, T* residual) {
+        const T* const X_raw, T* residual) const {
         Eigen::Quaternion<T> q_pose1_pose2(q_pose1_pose2_raw[3], q_pose1_pose2_raw[0], q_pose1_pose2_raw[1], q_pose1_pose2_raw[2]);
 
         Eigen::Matrix<T, 3, 1> t_pose1_pose2(
@@ -266,7 +295,7 @@ struct ReprojectionCam2Pose2{
     template<typename T>
     bool operator()(const T* const q_cam1_cam2_raw,const T* const t_cam1_cam2_raw,
         const T* const q_pose1_pose2_raw ,const T* const t_pose1_pose2_raw,
-        const T* const X_raw, T* residual) {
+        const T* const X_raw, T* residual) const {
 
         Eigen::Quaternion<T> q_cam1_cam2(q_cam1_cam2_raw[3],
             q_cam1_cam2_raw[0],
@@ -318,15 +347,130 @@ auto binocularSLAM(
     const cv::Matx33d& cameraMatrix1,
     const cv::Matx33d& cameraMatrix2) {
 
-    // estimation block
-    auto [R_1, t_1, points3D] =
-        estimateSLAM(x_pixels_pos_1_cam_1, x_pixels_pos_1_cam_2, cameraMatrix1);
+    auto x_norm_pos_1_cam_1 = cvVector2dToEigenVector2d( normalizePixels(x_pixels_pos_1_cam_1, cameraMatrix1));
+    auto x_norm_pos_1_cam_2 = cvVector2dToEigenVector2d( normalizePixels(x_pixels_pos_1_cam_2, cameraMatrix2));
+    auto x_norm_pos_2_cam_1 = cvVector2dToEigenVector2d( normalizePixels(x_pixels_pos_2_cam_1, cameraMatrix1));
+    auto x_norm_pos_2_cam_2 =  cvVector2dToEigenVector2d(normalizePixels(x_pixels_pos_2_cam_2, cameraMatrix2));
 
-    auto [R_2, t_2, points3D_2] =
-        estimateSLAM(x_pixels_pos_1_cam_1, x_pixels_pos_2_cam_1, cameraMatrix2); // R2(r1+t1) + t2
+    auto [R_cam1_cam2_est, t_cam1_cam2_est, points3D_stereo_est] =
+    estimateSLAM(
+        x_pixels_pos_1_cam_1,
+        x_pixels_pos_1_cam_2,
+        cameraMatrix1
+    );
+    Eigen::Quaterniond q_cam1_cam2 = rotationMatrixToQuaternion(R_cam1_cam2_est);
+    double q_cam1_cam2_raw[] = {
+        q_cam1_cam2.x(),
+        q_cam1_cam2.y(),
+        q_cam1_cam2.z(),
+        q_cam1_cam2.w()
+    };
 
-    auto [R3, t3, points3D_3] =
-        estimateSLAM(x_pixels_pos_1_cam_1, x_pixels_pos_2_cam_2, cameraMatrix2);
+    double t_cam1_cam2_raw[] = {t_cam1_cam2_est[0], t_cam1_cam2_est[1], t_cam1_cam2_est[2]};
+
+
+    auto [R_pose1_pose2_est, t_pose1_pose2_est, points3D_motion_est] =
+        estimateSLAM(
+            x_pixels_pos_1_cam_1,
+            x_pixels_pos_2_cam_1,
+            cameraMatrix1
+        );
+
+    Eigen::Quaterniond q_pose1_pose2 = rotationMatrixToQuaternion(R_pose1_pose2_est);
+    double q_pose1_pose2_raw[] = {
+        q_pose1_pose2.x(),
+        q_pose1_pose2.y(),
+        q_pose1_pose2.z(),
+        q_pose1_pose2.w()
+    };
+
+    double t_pose1_pose2_raw[] = {t_pose1_pose2_est[0], t_pose1_pose2_est[1], t_pose1_pose2_est[2]};
+
+    // cv::Matx33d R_cam2_pose2 =
+    //     R_cam1_cam2_est * R_pose1_pose2_est;
+    //
+    // vec3 t_cam2_pose2 =
+    //     R_cam1_cam2_est * t_pose1_pose2_est + t_cam1_cam2_est;
+
+
+    std::vector<Eigen::Vector3d> X_est;
+    X_est.reserve(points3D_stereo_est.size());
+
+    for (const auto& p : points3D_stereo_est) {
+        X_est.emplace_back(p.x, p.y, p.z);
+    }
+
+    ceres::Problem problem;
+
+    CV_Assert(x_norm_pos_1_cam_1.size() == X_est.size());
+    CV_Assert(x_norm_pos_1_cam_2.size() == X_est.size());
+    CV_Assert(x_norm_pos_2_cam_1.size() == X_est.size());
+    CV_Assert(x_norm_pos_2_cam_2.size() == X_est.size());
+
+    for (size_t i = 0; i < X_est.size(); ++i) {
+        problem.AddResidualBlock(
+            new ceres::AutoDiffCostFunction<ReprojectionCam1Pose1, 2, 3>(
+                new ReprojectionCam1Pose1(x_norm_pos_1_cam_1[i])
+            ),
+            nullptr,
+            X_est[i].data()
+        );
+
+        problem.AddResidualBlock(
+            new ceres::AutoDiffCostFunction<ReprojectionCam2Pose1, 2, 4, 3, 3>(
+                new ReprojectionCam2Pose1(x_norm_pos_1_cam_2[i])
+            ),
+            nullptr,
+            q_cam1_cam2_raw,
+            t_cam1_cam2_raw,
+            X_est[i].data()
+        );
+
+        problem.AddResidualBlock(
+            new ceres::AutoDiffCostFunction<ReprojectionCam1Pose2, 2, 4, 3, 3>(
+                new ReprojectionCam1Pose2(x_norm_pos_2_cam_1[i])
+            ),
+            nullptr,
+            q_pose1_pose2_raw,
+            t_pose1_pose2_raw,
+            X_est[i].data()
+        );
+
+        problem.AddResidualBlock(
+            new ceres::AutoDiffCostFunction<ReprojectionCam2Pose2, 2, 4, 3, 4, 3, 3>(
+                new ReprojectionCam2Pose2(x_norm_pos_2_cam_2[i])
+            ),
+            nullptr,
+            q_cam1_cam2_raw,
+            t_cam1_cam2_raw,
+            q_pose1_pose2_raw,
+            t_pose1_pose2_raw,
+            X_est[i].data()
+        );
+    }
+
+    problem.SetManifold(
+        q_cam1_cam2_raw,
+        new ceres::EigenQuaternionManifold
+    );
+
+    problem.SetManifold(
+        q_pose1_pose2_raw,
+        new ceres::EigenQuaternionManifold
+    );
+
+    problem.SetParameterBlockConstant(t_cam1_cam2_raw);
+    // problem.SetParameterBlockConstant(q_cam1_cam2_raw);
+
+    ceres::Solver::Options options;
+    options.minimizer_progress_to_stdout = true;
+    options.linear_solver_type = ceres::DENSE_QR;
+
+    ceres::Solver::Summary summary;
+    ceres::Solve(options, &problem, &summary);
+
+    std::cout << summary.BriefReport() << "\n";
+
 
 
 
