@@ -79,41 +79,6 @@ void task001() {
     std::cout << "f(x,y,z) = " << f << "\n";
 }
 
-struct BundleAdjustment {
-    Eigen::Vector2d x;
-
-    BundleAdjustment(const Eigen::Vector2d& x): x(x)
-    {}
-
-    template <typename T>
-    bool operator()(const T* const q_0,const T* const t_0, const T* const X_0, T* residuals) const {
-
-        Eigen::Quaternion<T> q(q_0[3], q_0[0], q_0[1], q_0[2]);
-
-        Eigen::Matrix<T, 3, 1> t(
-            t_0[0],
-            t_0[1],
-            t_0[2]
-        );
-
-        Eigen::Matrix<T, 3, 1> X(
-            X_0[0],
-            X_0[1],
-            X_0[2]
-        );
-        Eigen::Matrix<T, 3, 1> X_cam = q * X + t;
-
-        T u = X_cam[0] / X_cam[2];
-        T v = X_cam[1] / X_cam[2];
-
-        residuals[0] = u - T(x[0]);
-        residuals[1] = v - T(x[1]);
-
-        return true;
-    }
-
-
-};
 
 void task002Bundle() {
     std::vector<Eigen::Vector2d> projection_1 = {
@@ -312,10 +277,15 @@ void testEstimateSLAM() {
     }
 }
 
+void task003() {
+    testBinocularSLAMWithNoise();
+}
+
 
 int main() {
     // task001();
     // task002Bundle();
     // task002();
-    testEstimateSLAM();
+    // testEstimateSLAM();
+    task003();
 }

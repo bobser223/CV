@@ -5,7 +5,7 @@
 #ifndef CODE_UTILS002_H
 #define CODE_UTILS002_H
 
-
+#include <ceres/ceres.h>
 #include <opencv2/core/affine.hpp>
 #include <opencv2/core/types.hpp>
 #include "cv_types.h"
@@ -28,5 +28,207 @@ std::tuple<cv::Matx33d, vec3, std::vector<point3>>estimateSLAM(const std::vector
     const std::vector<vec2>& x_pixels_pos_2,
     const cv::Matx33d& cameraMatrix);
 
+struct BundleAdjustment {
+    Eigen::Vector2d x;
 
+    BundleAdjustment(const Eigen::Vector2d& x): x(x)
+    {}
+
+    template <typename T>
+    bool operator()(const T* const q_0,const T* const t_0, const T* const X_0, T* residuals) const {
+
+        Eigen::Quaternion<T> q(q_0[3], q_0[0], q_0[1], q_0[2]);
+
+        Eigen::Matrix<T, 3, 1> t(
+            t_0[0],
+            t_0[1],
+            t_0[2]
+        );
+
+        Eigen::Matrix<T, 3, 1> X(
+            X_0[0],
+            X_0[1],
+            X_0[2]
+        );
+        Eigen::Matrix<T, 3, 1> X_cam = q * X + t;
+
+        T u = X_cam[0] / X_cam[2];
+        T v = X_cam[1] / X_cam[2];
+
+        residuals[0] = u - T(x[0]);
+        residuals[1] = v - T(x[1]);
+
+        return true;
+    }
+
+};
+
+Eigen::Quaterniond rotationMatrixToQuaternion(const cv::Matx33d& R_cv);
+
+std::vector<Eigen::Vector2d> cvVector2dToEigenVector2d(const std::vector<cv::Vec2d>& x);
+
+struct ReprojectionCam1Pose1 {
+    Eigen::Vector2d x;
+    ReprojectionCam1Pose1(const Eigen::Vector2d& x): x(x){}
+
+    template<typename T>
+    bool operator()(const T* const X_raw, T* residual) const {
+        Eigen::Matrix<T, 3, 1> X(X_raw[0], X_raw[1], X_raw[2]);
+        T u = X[0] / X[2];
+        T v = X[1] / X[2];
+        residual[0] = u - T(x[0]);
+        residual[1] = v - T(x[1]);
+        return true;
+    }
+};
+
+struct ReprojectionCam2Pose1{
+    Eigen::Vector2d x;
+    ReprojectionCam2Pose1(const Eigen::Vector2d& x): x(x){}
+
+    template<typename T>
+    bool operator()(const T* const q_cam1_cam2_raw,const T* const t_cam1_cam2_raw,
+        const T* const X_raw, T* residual) const {
+        Eigen::Quaternion<T> q_cam1_cam2(q_cam1_cam2_raw[3],
+            q_cam1_cam2_raw[0],
+            q_cam1_cam2_raw[1],
+            q_cam1_cam2_raw[2]);
+
+        Eigen::Matrix<T, 3, 1> t_cam1_cam2(
+            t_cam1_cam2_raw[0],
+            t_cam1_cam2_raw[1],
+            t_cam1_cam2_raw[2]
+        );
+
+        Eigen::Matrix<T, 3, 1> X(
+            X_raw[0],
+            X_raw[1],
+            X_raw[2]
+        );
+
+        Eigen::Matrix<T, 3, 1> X_cam1_cam2 = q_cam1_cam2 * X + t_cam1_cam2;
+
+        T u = X_cam1_cam2[0] / X_cam1_cam2[2];
+        T v = X_cam1_cam2[1] / X_cam1_cam2[2];
+        residual[0] = u - T(x[0]);
+        residual[1] = v - T(x[1]);
+        return true;
+    }
+};
+
+struct ReprojectionCam1Pose2{
+    Eigen::Vector2d x;
+    ReprojectionCam1Pose2(const Eigen::Vector2d& x): x(x){}
+
+    template<typename T>
+    bool operator()(const T* const q_pose1_pose2_raw ,const T* const t_pose1_pose2_raw,
+        const T* const X_raw, T* residual) const {
+        Eigen::Quaternion<T> q_pose1_pose2(q_pose1_pose2_raw[3], q_pose1_pose2_raw[0], q_pose1_pose2_raw[1], q_pose1_pose2_raw[2]);
+
+        Eigen::Matrix<T, 3, 1> t_pose1_pose2(
+            t_pose1_pose2_raw[0],
+            t_pose1_pose2_raw[1],
+            t_pose1_pose2_raw[2]
+            );
+
+
+        Eigen::Matrix<T, 3, 1> X(
+            X_raw[0],
+            X_raw[1],
+            X_raw[2]
+        );
+
+        Eigen::Matrix<T, 3, 1> X_cam1_pose2 = q_pose1_pose2 * X + t_pose1_pose2;
+
+        T u = X_cam1_pose2[0] / X_cam1_pose2[2];
+        T v = X_cam1_pose2[1] / X_cam1_pose2[2];
+        residual[0] = u - T(x[0]);
+        residual[1] = v - T(x[1]);
+        return true;
+    }
+};
+
+struct ReprojectionCam2Pose2{
+    Eigen::Vector2d x;
+    ReprojectionCam2Pose2(const Eigen::Vector2d& x): x(x){}
+
+
+    template<typename T>
+    bool operator()(const T* const q_cam1_cam2_raw,const T* const t_cam1_cam2_raw,
+        const T* const q_pose1_pose2_raw ,const T* const t_pose1_pose2_raw,
+        const T* const X_raw, T* residual) const {
+
+        Eigen::Quaternion<T> q_cam1_cam2(q_cam1_cam2_raw[3],
+            q_cam1_cam2_raw[0],
+            q_cam1_cam2_raw[1],
+            q_cam1_cam2_raw[2]);
+
+        Eigen::Matrix<T, 3, 1> t_cam1_cam2(
+            t_cam1_cam2_raw[0],
+            t_cam1_cam2_raw[1],
+            t_cam1_cam2_raw[2]
+        );
+
+        Eigen::Quaternion<T> q_pose1_pose2(q_pose1_pose2_raw[3], q_pose1_pose2_raw[0], q_pose1_pose2_raw[1], q_pose1_pose2_raw[2]);
+
+        Eigen::Matrix<T, 3, 1> t_pose1_pose2(
+            t_pose1_pose2_raw[0],
+            t_pose1_pose2_raw[1],
+            t_pose1_pose2_raw[2]
+            );
+
+
+        Eigen::Matrix<T, 3, 1> X(
+            X_raw[0],
+            X_raw[1],
+            X_raw[2]
+        );
+
+        auto X_cam2_pose2 =q_cam1_cam2 * (q_pose1_pose2 * X + t_pose1_pose2) + t_cam1_cam2;
+
+        T u = X_cam2_pose2[0] / X_cam2_pose2[2];
+        T v = X_cam2_pose2[1] / X_cam2_pose2[2];
+        residual[0] = u - T(x[0]);
+        residual[1] = v - T(x[1]);
+        return true;
+    }
+
+
+
+};
+
+struct BinocularSLAMResult {
+    Eigen::Quaterniond q_cam1_cam2;
+    Eigen::Vector3d t_cam1_cam2;
+
+    Eigen::Quaterniond q_pose1_pose2;
+    Eigen::Vector3d t_pose1_pose2;
+
+    std::vector<Eigen::Vector3d> points3D;
+
+    ceres::Solver::Summary summary;
+};
+
+BinocularSLAMResult binocularSLAM(
+    const std::vector<vec2>& x_pixels_pos_1_cam_1,
+    const std::vector<vec2>& x_pixels_pos_1_cam_2,
+    const std::vector<vec2>& x_pixels_pos_2_cam_1,
+    const std::vector<vec2>& x_pixels_pos_2_cam_2,
+    const cv::Matx33d& cameraMatrix1,
+    const cv::Matx33d& cameraMatrix2);
+
+cv::Matx33d rodriguesToMatx(const cv::Vec3d& rvec);
+
+void addGaussianNoise(std::vector<vec2>& points, double sigma_px);
+
+void printVec3(const std::string& name, const vec3& v);
+
+void printEigenVec3(const std::string& name, const Eigen::Vector3d& v);
+
+void printQuaternion(const std::string& name, const Eigen::Quaterniond& q);
+
+void printRotationMatrixFromQuaternion(const std::string& name,
+                                       const Eigen::Quaterniond& q);
+
+void testBinocularSLAMWithNoise();
 #endif //CODE_UTILS002_H
