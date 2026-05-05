@@ -1,9 +1,17 @@
 #include "utils002.h"
+
+#include <fstream>
 #include <random>
 #include <iostream>
+#include <unordered_map>
 
 #include <opencv2/calib3d.hpp>
+#include <opencv2/features2d.hpp>
+#include <opencv2/highgui.hpp>
+#include <opencv2/imgcodecs.hpp>
+#include <opencv2/imgproc.hpp>
 
+#include "data_path.h"
 
 
 
@@ -68,11 +76,8 @@ std::vector<point3> triangulatePoints(
     std::vector<point3> points3D;
     points3D.reserve(x_pixels_pos_1.size());
 
-    // pixel -> K^{-1} * pixel
     std::vector<vec2> x_norm_1 = normalizePixels(x_pixels_pos_1, cameraMatrix);
     std::vector<vec2> x_norm_2 = normalizePixels(x_pixels_pos_2, cameraMatrix);
-
-
 
     cv::Mat P1 = cv::Mat::zeros(3, 4, CV_64F);
     P1.at<double>(0, 0) = 1.0;
@@ -102,11 +107,8 @@ std::vector<point3> triangulatePoints(
         pts2.at<double>(1, i) = x_norm_2[i][1];
     }
 
-
     cv::Mat points4D;
     cv::triangulatePoints(P1, P2, pts1, pts2, points4D);
-
-
 
     for (int i = 0; i < points4D.cols; ++i) {
         double X = points4D.at<double>(0, i);
@@ -114,20 +116,13 @@ std::vector<point3> triangulatePoints(
         double Z = points4D.at<double>(2, i);
         double W = points4D.at<double>(3, i);
 
-        if (std::abs(W) < 1e-12) {
-            continue;
+        point3 p(0.0, 0.0, 0.0);
+
+        if (std::abs(W) > 1e-12) {
+            p = point3(X / W, Y / W, Z / W);
         }
 
-        point3 p(
-            X / W,
-            Y / W,
-            Z / W
-        );
-
-
-        if (p.z > 0.0) {
-            points3D.push_back(p);
-        }
+        points3D.push_back(p);
     }
 
     return points3D;
@@ -172,7 +167,8 @@ BinocularSLAMResult binocularSLAM(
     const std::vector<vec2>& x_pixels_pos_2_cam_1,
     const std::vector<vec2>& x_pixels_pos_2_cam_2,
     const cv::Matx33d& cameraMatrix1,
-    const cv::Matx33d& cameraMatrix2) {
+    const cv::Matx33d& cameraMatrix2,
+    const vec3 baseline) {
 
     auto x_norm_pos_1_cam_1 = cvVector2dToEigenVector2d( normalizePixels(x_pixels_pos_1_cam_1, cameraMatrix1));
     auto x_norm_pos_1_cam_2 = cvVector2dToEigenVector2d( normalizePixels(x_pixels_pos_1_cam_2, cameraMatrix2));
@@ -193,7 +189,18 @@ BinocularSLAMResult binocularSLAM(
         q_cam1_cam2.w()
     };
 
-    double t_cam1_cam2_raw[] = {t_cam1_cam2_est[0], t_cam1_cam2_est[1], t_cam1_cam2_est[2]};
+    double t_cam1_cam2_raw[3];
+
+    if (baseline.dot(baseline) < 1e-9) { // vector == 0, default parameter
+        t_cam1_cam2_raw[0] = t_cam1_cam2_est[0];
+        t_cam1_cam2_raw[1] = t_cam1_cam2_est[1];
+        t_cam1_cam2_raw[2] = t_cam1_cam2_est[2];
+    } else {
+        t_cam1_cam2_raw[0] = baseline[0];
+        t_cam1_cam2_raw[1] = baseline[1];
+        t_cam1_cam2_raw[2] = baseline[2];
+    }
+
 
 
     auto [R_pose1_pose2_est, t_pose1_pose2_est, points3D_motion_est] =
@@ -541,5 +548,419 @@ void testBinocularSLAMWithNoise() {
     }
 }
 
+std::vector<cv::DMatch> matchDescriptorsKNN(
+    const cv::Mat& des1,
+    const cv::Mat& des2,
+    double ratio
+) {
+    cv::BFMatcher matcher(cv::NORM_HAMMING, false);
 
+    std::vector<std::vector<cv::DMatch>> knnMatches;
+    matcher.knnMatch(des1, des2, knnMatches, 2);
+
+    std::vector<cv::DMatch> goodMatches;
+
+    for (const auto& pair : knnMatches) {
+        if (pair.size() < 2) {
+            continue;
+        }
+
+        const cv::DMatch& m = pair[0];
+        const cv::DMatch& n = pair[1];
+
+        if (m.distance < ratio * n.distance) {
+            goodMatches.push_back(m);
+        }
+    }
+
+    return goodMatches;
+}
+
+
+void savePoints3DToFile(
+    const std::vector<Eigen::Vector3d>& points3D,
+    const std::string& filename
+) {
+    std::ofstream file(filename);
+
+    if (!file.is_open()) {
+        throw std::runtime_error("Cannot open file for writing: " + filename);
+    }
+
+    file << std::setprecision(17);
+
+    for (const auto& p : points3D) {
+        file << p.x() << " "
+             << p.y() << " "
+             << p.z() << "\n";
+    }
+
+    file.close();
+}
+
+
+std::vector<Eigen::Vector3d> loadPoints3DFromFile(
+    const std::string& filename
+) {
+    std::ifstream file(filename);
+
+    if (!file.is_open()) {
+        throw std::runtime_error("Cannot open file for reading: " + filename);
+    }
+
+    std::vector<Eigen::Vector3d> points3D;
+
+    double x, y, z;
+
+    while (file >> x >> y >> z) {
+        points3D.emplace_back(x, y, z);
+    }
+
+    file.close();
+
+    return points3D;
+}
+
+void drawAndSaveFourKeypointImages(
+    const cv::Mat& img1,
+    const cv::Mat& img2,
+    const cv::Mat& img3,
+    const cv::Mat& img4,
+    const std::vector<cv::KeyPoint>& kp1,
+    const std::vector<cv::KeyPoint>& kp2,
+    const std::vector<cv::KeyPoint>& kp3,
+    const std::vector<cv::KeyPoint>& kp4,
+    const std::string& outputDir,
+    const std::string& prefix,
+    bool showImages
+) {
+    cv::Mat out1, out2, out3, out4;
+
+    cv::drawKeypoints(
+        img1, kp1, out1,
+        cv::Scalar(0, 255, 0),
+        cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS
+    );
+
+    cv::drawKeypoints(
+        img2, kp2, out2,
+        cv::Scalar(0, 255, 0),
+        cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS
+    );
+
+    cv::drawKeypoints(
+        img3, kp3, out3,
+        cv::Scalar(0, 255, 0),
+        cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS
+    );
+
+    cv::drawKeypoints(
+        img4, kp4, out4,
+        cv::Scalar(0, 255, 0),
+        cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS
+    );
+
+    if (!outputDir.empty()) {
+        cv::imwrite(outputDir + prefix + "_img1_all_keypoints.jpg", out1);
+        cv::imwrite(outputDir + prefix + "_img2_all_keypoints.jpg", out2);
+        cv::imwrite(outputDir + prefix + "_img3_all_keypoints.jpg", out3);
+        cv::imwrite(outputDir + prefix + "_img4_all_keypoints.jpg", out4);
+    }
+
+    if (showImages) {
+        cv::imshow(prefix + " img1 all keypoints", out1);
+        cv::imshow(prefix + " img2 all keypoints", out2);
+        cv::imshow(prefix + " img3 all keypoints", out3);
+        cv::imshow(prefix + " img4 all keypoints", out4);
+        cv::waitKey(0);
+    }
+}
+
+void drawAndSaveFourMatchedKeypointImages(
+    const cv::Mat& img1,
+    const cv::Mat& img2,
+    const cv::Mat& img3,
+    const cv::Mat& img4,
+    const std::vector<cv::Point2f>& matchedPts1,
+    const std::vector<cv::Point2f>& matchedPts2,
+    const std::vector<cv::Point2f>& matchedPts3,
+    const std::vector<cv::Point2f>& matchedPts4,
+    const std::string& outputDir,
+    const std::string& prefix,
+    bool showImages
+) {
+    cv::Mat out1 = img1.clone();
+    cv::Mat out2 = img2.clone();
+    cv::Mat out3 = img3.clone();
+    cv::Mat out4 = img4.clone();
+
+    for (size_t i = 0; i < matchedPts1.size(); ++i) {
+        cv::circle(out1, matchedPts1[i], 8, cv::Scalar(0, 0, 255), 2);
+        cv::circle(out2, matchedPts2[i], 8, cv::Scalar(0, 0, 255), 2);
+        cv::circle(out3, matchedPts3[i], 8, cv::Scalar(0, 0, 255), 2);
+        cv::circle(out4, matchedPts4[i], 8, cv::Scalar(0, 0, 255), 2);
+
+        cv::putText(
+            out1,
+            std::to_string(i),
+            matchedPts1[i] + cv::Point2f(5.0f, -5.0f),
+            cv::FONT_HERSHEY_SIMPLEX,
+            0.5,
+            cv::Scalar(255, 0, 0),
+            1
+        );
+
+        cv::putText(
+            out2,
+            std::to_string(i),
+            matchedPts2[i] + cv::Point2f(5.0f, -5.0f),
+            cv::FONT_HERSHEY_SIMPLEX,
+            0.5,
+            cv::Scalar(255, 0, 0),
+            1
+        );
+
+        cv::putText(
+            out3,
+            std::to_string(i),
+            matchedPts3[i] + cv::Point2f(5.0f, -5.0f),
+            cv::FONT_HERSHEY_SIMPLEX,
+            0.5,
+            cv::Scalar(255, 0, 0),
+            1
+        );
+
+        cv::putText(
+            out4,
+            std::to_string(i),
+            matchedPts4[i] + cv::Point2f(5.0f, -5.0f),
+            cv::FONT_HERSHEY_SIMPLEX,
+            0.5,
+            cv::Scalar(255, 0, 0),
+            1
+        );
+    }
+
+    if (!outputDir.empty()) {
+        cv::imwrite(outputDir + prefix + "_img1_common_matches.jpg", out1);
+        cv::imwrite(outputDir + prefix + "_img2_common_matches.jpg", out2);
+        cv::imwrite(outputDir + prefix + "_img3_common_matches.jpg", out3);
+        cv::imwrite(outputDir + prefix + "_img4_common_matches.jpg", out4);
+    }
+
+    if (showImages) {
+        cv::imshow(prefix + " img1 common matches", out1);
+        cv::imshow(prefix + " img2 common matches", out2);
+        cv::imshow(prefix + " img3 common matches", out3);
+        cv::imshow(prefix + " img4 common matches", out4);
+        cv::waitKey(0);
+    }
+}
+
+
+
+
+
+FourViewMatches findFourViewMatches(
+    const cv::Mat& img1,
+    const cv::Mat& img2,
+    const cv::Mat& img3,
+    const cv::Mat& img4,
+    bool debugDrawAllKeypoints ,
+    bool debugDrawMatchedKeypoints ,
+    bool debugShowImages ,
+    const std::string& debugOutputDir ,
+    const std::string& debugPrefix
+) {
+    cv::Mat gray1, gray2, gray3, gray4;
+
+    cv::cvtColor(img1, gray1, cv::COLOR_BGR2GRAY);
+    cv::cvtColor(img2, gray2, cv::COLOR_BGR2GRAY);
+    cv::cvtColor(img3, gray3, cv::COLOR_BGR2GRAY);
+    cv::cvtColor(img4, gray4, cv::COLOR_BGR2GRAY);
+
+    cv::Ptr<cv::ORB> orb = cv::ORB::create(
+        50000,
+        1.2f,
+        8,
+        31,
+        0,
+        2,
+        cv::ORB::HARRIS_SCORE,
+        31,
+        20
+    );
+
+    std::vector<cv::KeyPoint> kp1, kp2, kp3, kp4;
+    cv::Mat des1, des2, des3, des4;
+
+    orb->detectAndCompute(gray1, cv::noArray(), kp1, des1);
+    orb->detectAndCompute(gray2, cv::noArray(), kp2, des2);
+    orb->detectAndCompute(gray3, cv::noArray(), kp3, des3);
+    orb->detectAndCompute(gray4, cv::noArray(), kp4, des4);
+
+    if (des1.empty() || des2.empty() || des3.empty() || des4.empty()) {
+        throw std::runtime_error("Some image has no ORB descriptors");
+    }
+
+    std::cout << "Keypoints:\n";
+    std::cout << "img1: " << kp1.size() << "\n";
+    std::cout << "img2: " << kp2.size() << "\n";
+    std::cout << "img3: " << kp3.size() << "\n";
+    std::cout << "img4: " << kp4.size() << "\n";
+
+    if (debugDrawAllKeypoints) {
+        drawAndSaveFourKeypointImages(
+            img1, img2, img3, img4,
+            kp1, kp2, kp3, kp4,
+            debugOutputDir,
+            debugPrefix,
+            debugShowImages
+        );
+    }
+
+    std::vector<cv::DMatch> matches12 = matchDescriptorsKNN(des1, des2, 0.75);
+    std::vector<cv::DMatch> matches13 = matchDescriptorsKNN(des1, des3, 0.75);
+    std::vector<cv::DMatch> matches14 = matchDescriptorsKNN(des1, des4, 0.75);
+
+    std::cout << "Pair matches:\n";
+    std::cout << "1-2: " << matches12.size() << "\n";
+    std::cout << "1-3: " << matches13.size() << "\n";
+    std::cout << "1-4: " << matches14.size() << "\n";
+
+    std::unordered_map<int, int> map12;
+    std::unordered_map<int, int> map13;
+    std::unordered_map<int, int> map14;
+
+    for (const auto& m : matches12) {
+        map12[m.queryIdx] = m.trainIdx;
+    }
+
+    for (const auto& m : matches13) {
+        map13[m.queryIdx] = m.trainIdx;
+    }
+
+    for (const auto& m : matches14) {
+        map14[m.queryIdx] = m.trainIdx;
+    }
+
+    FourViewMatches result;
+
+    std::vector<cv::Point2f> matchedPts1;
+    std::vector<cv::Point2f> matchedPts2;
+    std::vector<cv::Point2f> matchedPts3;
+    std::vector<cv::Point2f> matchedPts4;
+
+    for (const auto& [idx1, idx2] : map12) {
+        auto it13 = map13.find(idx1);
+        auto it14 = map14.find(idx1);
+
+        if (it13 == map13.end() || it14 == map14.end()) {
+            continue;
+        }
+
+        int idx3 = it13->second;
+        int idx4 = it14->second;
+
+        cv::Point2f p1 = kp1[idx1].pt;
+        cv::Point2f p2 = kp2[idx2].pt;
+        cv::Point2f p3 = kp3[idx3].pt;
+        cv::Point2f p4 = kp4[idx4].pt;
+
+        result.x1.emplace_back(p1.x, p1.y);
+        result.x2.emplace_back(p2.x, p2.y);
+        result.x3.emplace_back(p3.x, p3.y);
+        result.x4.emplace_back(p4.x, p4.y);
+
+        matchedPts1.push_back(p1);
+        matchedPts2.push_back(p2);
+        matchedPts3.push_back(p3);
+        matchedPts4.push_back(p4);
+    }
+
+    std::cout << "Four-view common matches: " << result.x1.size() << "\n";
+
+    if (debugDrawMatchedKeypoints) {
+        drawAndSaveFourMatchedKeypointImages(
+            img1, img2, img3, img4,
+            matchedPts1, matchedPts2, matchedPts3, matchedPts4,
+            debugOutputDir,
+            debugPrefix,
+            debugShowImages
+        );
+    }
+
+    return result;
+}
+
+void task004() {
+        cv::Matx33d K(
+        4084.54110, 0.0,        2836.77733,
+        0.0,        4096.24707, 2139.91516,
+        0.0,        0.0,        1.0
+    );
+
+    cv::Vec<double, 5> distCoeffs(
+         0.20924062,
+        -0.64274374,
+        -0.00404513,
+        -0.00353257,
+         0.36497480
+    );
+
+    std::string path_to_images = PATH_TO_DATA + "hw004/sheep_iphone_17_pro_main/jpg/";
+    cv::Mat pos1_cam1_img = cv::imread(path_to_images + "pos1_cam1.jpg");
+    cv::Mat pos1_cam2_img = cv::imread(path_to_images + "pos1_cam2.jpg");
+    cv::Mat pos2_cam1_img = cv::imread(path_to_images + "pos2_cam1.jpg");
+    cv::Mat pos2_cam2_img = cv::imread(path_to_images + "pos2_cam2.jpg");
+
+    auto [pos1_cam1, pos1_cam2, pos2_cam1, pos2_cam2] =
+        findFourViewMatches(
+            pos1_cam1_img,
+            pos1_cam2_img,
+            pos2_cam1_img,
+            pos2_cam2_img,
+            true,
+            true,
+            true,
+            PATH_TO_DATA + "hw004/sheep_iphone_17_pro_main/debug/"
+        );
+
+    auto orb = cv::ORB::create(2000, 1.2, 8, 31, 0, 2, cv::ORB::HARRIS_SCORE, 31);
+
+    auto [ q_cam1_cam2,
+     t_cam1_cam2,
+    q_pose1_pose2,
+    t_pose1_pose2,
+    points3D,
+    summary] = binocularSLAM(pos1_cam1, pos1_cam2, pos2_cam1, pos2_cam2, K, K, {-0.3,0.,0.});
+
+    std::cout << "q_cam1_cam2 = "
+              << "[w: " << q_cam1_cam2.w()
+              << ", x: " << q_cam1_cam2.x()
+              << ", y: " << q_cam1_cam2.y()
+              << ", z: " << q_cam1_cam2.z()
+              << "]\n";
+
+    std::cout << "t_cam1_cam2 = "
+              << t_cam1_cam2.transpose()
+              << "\n\n";
+
+    std::cout << "q_pose1_pose2 = "
+              << "[w: " << q_pose1_pose2.w()
+              << ", x: " << q_pose1_pose2.x()
+              << ", y: " << q_pose1_pose2.y()
+              << ", z: " << q_pose1_pose2.z()
+              << "]\n";
+
+    std::cout << "t_pose1_pose2 = "
+              << t_pose1_pose2.transpose()
+              << "\n";
+
+    savePoints3DToFile(points3D, PATH_TO_DATA + "hw004/sheep_iphone_17_pro_main/points3D.txt");
+
+
+
+
+}
 

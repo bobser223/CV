@@ -25,6 +25,7 @@ add_executable(homework003
         HW/hw003/task4.cpp
         HW/hw003/task4.h
         include/cv_types.h
+        include/data_path.h
 
 )
 
@@ -40,6 +41,7 @@ add_executable( homework004
         HW/hw004/main.cpp
         HW/hw004/utils002.cpp
         HW/hw004/utils002.h
+#        HW/docker_worm/worm_server.cpp
 
 )
 target_include_directories(homework004 PRIVATE ${OpenCV_INCLUDE_DIRS})

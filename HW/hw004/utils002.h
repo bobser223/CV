@@ -5,8 +5,13 @@
 #ifndef CODE_UTILS002_H
 #define CODE_UTILS002_H
 
+#include <string>
+#include <tuple>
+#include <vector>
+
 #include <ceres/ceres.h>
 #include <opencv2/core/affine.hpp>
+#include <opencv2/core/mat.hpp>
 #include <opencv2/core/types.hpp>
 #include "cv_types.h"
 
@@ -215,7 +220,8 @@ BinocularSLAMResult binocularSLAM(
     const std::vector<vec2>& x_pixels_pos_2_cam_1,
     const std::vector<vec2>& x_pixels_pos_2_cam_2,
     const cv::Matx33d& cameraMatrix1,
-    const cv::Matx33d& cameraMatrix2);
+    const cv::Matx33d& cameraMatrix2,
+    const vec3 baseline = vec3{0.,0.,0.});
 
 cv::Matx33d rodriguesToMatx(const cv::Vec3d& rvec);
 
@@ -230,5 +236,71 @@ void printQuaternion(const std::string& name, const Eigen::Quaterniond& q);
 void printRotationMatrixFromQuaternion(const std::string& name,
                                        const Eigen::Quaterniond& q);
 
+
+void savePoints3DToFile(
+    const std::vector<Eigen::Vector3d>& points3D,
+    const std::string& filename
+);
+
+std::vector<Eigen::Vector3d> loadPoints3DFromFile(
+    const std::string& filename
+);
+
+void drawAndSaveFourKeypointImages(
+    const cv::Mat& img1,
+    const cv::Mat& img2,
+    const cv::Mat& img3,
+    const cv::Mat& img4,
+    const std::vector<cv::KeyPoint>& kp1,
+    const std::vector<cv::KeyPoint>& kp2,
+    const std::vector<cv::KeyPoint>& kp3,
+    const std::vector<cv::KeyPoint>& kp4,
+    const std::string& outputDir,
+    const std::string& prefix,
+    bool showImages
+);
+
+
+void drawAndSaveFourMatchedKeypointImages(
+    const cv::Mat& img1,
+    const cv::Mat& img2,
+    const cv::Mat& img3,
+    const cv::Mat& img4,
+    const std::vector<cv::Point2f>& matchedPts1,
+    const std::vector<cv::Point2f>& matchedPts2,
+    const std::vector<cv::Point2f>& matchedPts3,
+    const std::vector<cv::Point2f>& matchedPts4,
+    const std::string& outputDir,
+    const std::string& prefix,
+    bool showImages
+);
+
+
 void testBinocularSLAMWithNoise();
+
+struct FourViewMatches {
+    std::vector<vec2> x1; // pos1_cam1
+    std::vector<vec2> x2; // pos1_cam2
+    std::vector<vec2> x3; // pos2_cam1
+    std::vector<vec2> x4; // pos2_cam2
+};
+
+std::vector<cv::DMatch> matchDescriptorsKNN(
+    const cv::Mat& des1,
+    const cv::Mat& des2,
+    double ratio = 0.75);
+
+FourViewMatches findFourViewMatches(
+    const cv::Mat& img1,
+    const cv::Mat& img2,
+    const cv::Mat& img3,
+    const cv::Mat& img4,
+    bool debugDrawAllKeypoints = false,
+    bool debugDrawMatchedKeypoints = false,
+    bool debugShowImages = false,
+    const std::string& debugOutputDir = "",
+    const std::string& debugPrefix = "four_view"
+);
+
+void task004();
 #endif //CODE_UTILS002_H

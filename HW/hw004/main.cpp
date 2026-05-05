@@ -287,5 +287,6 @@ int main() {
     // task002Bundle();
     // task002();
     // testEstimateSLAM();
-    task003();
+    // task003();
+    task004();
 }
