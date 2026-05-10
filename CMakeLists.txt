@@ -51,3 +51,21 @@ target_link_libraries(homework004 PRIVATE
         Matplot++::matplot
 )
 
+
+add_executable( homework005
+        HW/hw005/main.cpp
+        HW/hw005/utils005.cpp
+        HW/hw005/utils005.h
+        HW/hw005/distorsion.cpp
+        HW/hw005/distortion.h
+        HW/hw005/kf.cpp
+        HW/hw005/kf.h
+)
+
+
+target_include_directories(homework005 PRIVATE ${OpenCV_INCLUDE_DIRS})
+target_link_libraries(homework005 PRIVATE
+        ${OpenCV_LIBS}
+        Ceres::ceres
+        Matplot++::matplot
+)

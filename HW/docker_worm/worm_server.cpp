@@ -180,16 +180,27 @@ std::string mapToString() {
 }
 
 int main() {
+    const char* port_env  = std::getenv("PORT");
+    const char* steps_per_request_env = std::getenv("STEPS_PER_REQUEST");
+
+    int port = port_env ? std::stoi(port_env) : 8080;
+    int steps_per_request = steps_per_request_env ? std::stoi(steps_per_request_env) : 1;
+
+    std::cout << "Server started on http://localhost:" << port << "\n";
+
     srand(time(nullptr));
 
     initGame();
 
     httplib::Server server;
 
-    server.Get("/step", [](const httplib::Request& req, httplib::Response& res) {
-        stepGame();
+    server.Get("/step", [steps_per_request](const httplib::Request& req, httplib::Response& res) {
+        for (int i = 0; i < steps_per_request; ++i) {
+            stepGame();
 
         res.set_content(mapToString(), "text/plain");
+        }
+
     });
 
     server.Get("/map", [](const httplib::Request& req, httplib::Response& res) {
@@ -197,7 +208,7 @@ int main() {
     });
 
     std::cout << "Server started on http://localhost:8080\n";
-    server.listen("0.0.0.0", 8080);
+    server.listen("0.0.0.0", port);
 
     return 0;
 }
