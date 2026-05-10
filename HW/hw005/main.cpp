@@ -4,11 +4,11 @@
 
 #include "utils005.h"
 #include "distortion.h"
-
+#include "kf.h"
 int main() {
     // testPointUndistortion();
-    testDistortImageTangential();
-
+    // testDistortImageTangential();
+    testKalmanFilterAccelerometerGPS();
     return 0;
 
 
